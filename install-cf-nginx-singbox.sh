@@ -53,6 +53,7 @@ BRANCH_EXPLICIT=0
 FORCE=0
 PREFLIGHT_ONLY=0
 HEALTH_CHECK_ONLY=0
+SHOW_CLIENT_ARTIFACTS_ONLY=0
 WITH_WARP_UPSTREAM=0
 WARP_SETTING_EXPLICIT=0
 SKIP_CERTBOT=0
@@ -84,6 +85,9 @@ Optional:
   --preflight              Detect conflicting services and validate inputs only.
   --health-check           Validate an already-installed deployment. Domain and IP
                            are read from its root-only credentials file.
+  --show-client-artifacts  Render both node QR codes in this SSH terminal and
+                           print secure client-JSON download paths. Does not
+                           change services or credentials.
   --force                  Replace this installer's own files, or take over a
                            conflicting Nginx virtual host for --domain after making
                            timestamped backups. It never overwrites another process
@@ -113,6 +117,7 @@ while (($#)); do
     --skip-certbot) SKIP_CERTBOT=1; shift ;;
     --preflight) PREFLIGHT_ONLY=1; shift ;;
     --health-check) HEALTH_CHECK_ONLY=1; shift ;;
+    --show-client-artifacts) SHOW_CLIENT_ARTIFACTS_ONLY=1; shift ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1" ;;
@@ -1197,6 +1202,54 @@ EOF
   chmod 0600 "$QR_DIR"/vless-*.png "$QR_DIR"/vless-*.uri
 }
 
+show_client_artifacts() {
+  local primary_uri_file="$QR_DIR/vless-httpupgrade-shadowrocket.uri"
+  local backup_uri_file="$QR_DIR/vless-reality-backup-shadowrocket.uri"
+  local primary_profile="$CLIENT_DIR/sing-box-vless-httpupgrade.json"
+  local backup_profile="$CLIENT_DIR/sing-box-vless-reality-backup.json"
+
+  [[ -r $STATE_FILE ]] || die "No $APP_NAME deployment was found at $STATE_FILE."
+  DOMAIN="$(state_value DEPLOYED_DOMAIN)"
+  VPS_IP="$(state_value VPS_IP)"
+  valid_domain "$DOMAIN" || die 'Saved deployment domain is invalid.'
+  valid_ipv4 "$VPS_IP" || die 'Saved VPS IPv4 is invalid.'
+  [[ -s $primary_uri_file && -s $backup_uri_file && -s $primary_profile && -s $backup_profile ]] \
+    || die 'Client QR or JSON artifacts are incomplete; run the installer with --force to rebuild them.'
+
+  cat <<EOF
+
+====================================================================
+Client artifacts — keep these private
+====================================================================
+Client JSON download directory:
+  $CLIENT_DIR
+
+Download the two sing-box JSON profiles securely from your computer:
+  scp root@$VPS_IP:$primary_profile .
+  scp root@$VPS_IP:$backup_profile .
+
+PNG QR files (for secure download or viewing):
+  $QR_DIR/vless-httpupgrade-shadowrocket.png
+  $QR_DIR/vless-reality-backup-shadowrocket.png
+
+Terminal QR: Cloudflare primary — VLESS + TLS + HTTPUpgrade ($DOMAIN:443)
+EOF
+  qrencode -t ANSIUTF8 "$(tr -d '\n' < "$primary_uri_file")" \
+    || warn 'Could not render the Cloudflare primary QR in this terminal; use its PNG file instead.'
+  cat <<EOF
+
+Terminal QR: direct backup — VLESS + REALITY + Vision ($VPS_IP:$BACKUP_PORT)
+EOF
+  qrencode -t ANSIUTF8 "$(tr -d '\n' < "$backup_uri_file")" \
+    || warn 'Could not render the direct backup QR in this terminal; use its PNG file instead.'
+  cat <<'EOF'
+
+The QR codes contain connection credentials only. Import the JSON profiles into
+sing-box when you need the built-in China-direct / other-traffic-proxy routing.
+Do not paste URIs, QR screenshots, or JSON files into public chats or GitHub.
+EOF
+}
+
 verify_deployment() {
   local code headers
   [[ -r $STATE_FILE ]] || die "Missing credentials: $STATE_FILE"
@@ -1271,6 +1324,11 @@ preflight() {
 main() {
   if (( HEALTH_CHECK_ONLY )); then
     health_check
+    return
+  fi
+  if (( SHOW_CLIENT_ARTIFACTS_ONLY )); then
+    require_supported_host
+    show_client_artifacts
     return
   fi
   require_supported_host
@@ -1363,6 +1421,7 @@ EOF
 WARP upstream:      disabled (proxy traffic uses the VPS direct egress)
 EOF
   fi
+  show_client_artifacts
 }
 
 main

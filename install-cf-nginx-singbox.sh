@@ -1276,8 +1276,17 @@ verify_deployment() {
     || die 'One or more VLESS QR-code images are missing.'
   systemctl is-active --quiet sing-box-cf-nginx || die 'sing-box-cf-nginx service is not active.'
   systemctl is-active --quiet nginx || die 'nginx service is not active.'
+  systemctl is-active --quiet cf-nginx-singbox-sync.timer \
+    || die 'The GitHub website-sync timer is not active.'
   systemctl is-active --quiet cf-nginx-singbox-cert-renew.timer \
     || die 'The certificate-renewal timer is not active.'
+  [[ -x $SYNC_SCRIPT ]] || die "Website-sync script is missing or not executable: $SYNC_SCRIPT"
+  grep -Fq 'chmod -R a+rX "$release"' "$SYNC_SCRIPT" \
+    || die 'Website-sync script is outdated and may publish files unreadable by Nginx. Rerun the latest installer with --force.'
+  [[ -f $WEB_ROOT/current/index.html ]] \
+    || die "Published website has no index.html: $WEB_ROOT/current/index.html"
+  runuser -u www-data -- test -r "$WEB_ROOT/current/index.html" \
+    || die 'Nginx user cannot read the published website index.html.'
   if warp_is_configured; then
     systemctl is-active --quiet cf-nginx-singbox-warp-health.timer \
       || die 'The WARP health-monitor timer is not active.'
@@ -1290,13 +1299,15 @@ verify_deployment() {
     || die "sing-box is not listening on direct fallback TCP $BACKUP_PORT."
   code="$(curl -ksS --resolve "$DOMAIN:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$DOMAIN/healthz")"
   [[ $code == 200 ]] || die "Local HTTPS health endpoint returned HTTP $code instead of 200."
+  code="$(curl -ksS --resolve "$DOMAIN:443:127.0.0.1" -o /dev/null -w '%{http_code}' "https://$DOMAIN/")"
+  [[ $code == 200 ]] || die "Local HTTPS website root returned HTTP $code instead of 200."
   headers="$(curl -sSI --connect-timeout 8 --max-time 20 "https://$DOMAIN/" || true)"
   if grep -qi '^server: cloudflare' <<< "$headers"; then
     info 'Public HTTPS response is currently traversing Cloudflare.'
   else
     warn 'Could not confirm a Cloudflare response header from this VPS yet. Confirm that the DNS record is orange-cloud proxied before using the node.'
   fi
-  info "Validation passed: Nginx owns 443, the HTTPUpgrade backend is loopback-only, direct REALITY backup TCP $BACKUP_PORT is active, both QR profiles validate, and certificate renewal is scheduled."
+  info "Validation passed: website sync and public files are readable by Nginx; Nginx owns 443; the HTTPUpgrade backend is loopback-only; direct REALITY backup TCP $BACKUP_PORT is active; both QR profiles validate; certificate renewal is scheduled."
 }
 
 health_check() {

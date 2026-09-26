@@ -69,5 +69,5 @@ sudo bash install-cf-nginx-singbox.sh \
 - 同一台 VPS 上原有直连 sing-box 若占用 TCP 443，必须先自行决定迁移窗口；本脚本不会强行覆盖它。
 - Cloudflare 主节点要求客户端支持 VLESS + TLS + HTTPUpgrade；备用二维码要求客户端支持 REALITY + Vision。
 - 二维码只包含节点参数；需要分流规则时导入对应的 sing-box JSON。
-- 后续检查：`sudo bash install-cf-nginx-singbox.sh --health-check`。
+- 后续检查：`sudo bash install-cf-nginx-singbox.sh --health-check`；它会验证网站同步 timer、Nginx 对当前网页文件的读取权限、主/备节点配置与监听、WARP（启用时）、Fail2Ban、证书 timer 和 Cloudflare HTTPS 回源。
 - 每次安装成功后会在 SSH 终端直接渲染主/备节点二维码，并列出 JSON 下载目录与 `scp` 命令；后续可随时运行 `sudo bash install-cf-nginx-singbox.sh --show-client-artifacts` 重新显示，且不会修改服务或凭据。

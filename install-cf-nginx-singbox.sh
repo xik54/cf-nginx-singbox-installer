@@ -533,12 +533,26 @@ WantedBy=timers.target
 EOF
 }
 
+state_value() {
+  # credentials.env is data, not a shell program. Read only the generated
+  # values we need so old state files containing immutable port constants do
+  # not attempt to overwrite this script's readonly variables.
+  local key="$1"
+  sed -n "s/^${key}='\(.*\)'$/\1/p" "$STATE_FILE" | tail -n1
+}
+
 load_or_create_credentials() {
   local reality_pair
   if [[ -r $STATE_FILE ]]; then
-    # shellcheck disable=SC1090
-    source "$STATE_FILE"
-    [[ ${HTTPUPGRADE_UUID:-} && ${HTTPUPGRADE_PATH:-} && ${DEPLOYED_DOMAIN:-} ]] \
+    DEPLOYED_DOMAIN="$(state_value DEPLOYED_DOMAIN)"
+    HTTPUPGRADE_UUID="$(state_value HTTPUPGRADE_UUID)"
+    HTTPUPGRADE_PATH="$(state_value HTTPUPGRADE_PATH)"
+    BACKUP_UUID="$(state_value BACKUP_UUID)"
+    BACKUP_PRIVATE_KEY="$(state_value BACKUP_PRIVATE_KEY)"
+    BACKUP_PUBLIC_KEY="$(state_value BACKUP_PUBLIC_KEY)"
+    BACKUP_SHORT_ID="$(state_value BACKUP_SHORT_ID)"
+    WARP_UPSTREAM_ENABLED="$(state_value WARP_UPSTREAM_ENABLED)"
+    [[ $HTTPUPGRADE_UUID && $HTTPUPGRADE_PATH && $DEPLOYED_DOMAIN ]] \
       || die "Existing $STATE_FILE is incomplete; inspect the saved configuration before using --force."
     [[ $DEPLOYED_DOMAIN == "$DOMAIN" ]] \
       || die "Existing credentials belong to $DEPLOYED_DOMAIN, not $DOMAIN. Use a separate VPS or explicitly archive the prior installation."
@@ -641,15 +655,11 @@ DEPLOYED_DOMAIN='$DOMAIN'
 VPS_IP='$VPS_IP'
 HTTPUPGRADE_UUID='$HTTPUPGRADE_UUID'
 HTTPUPGRADE_PATH='$HTTPUPGRADE_PATH'
-LOOPBACK_PORT='$LOOPBACK_PORT'
-BACKUP_PORT='$BACKUP_PORT'
-BACKUP_SNI='$BACKUP_SNI'
 BACKUP_UUID='$BACKUP_UUID'
 BACKUP_PRIVATE_KEY='$BACKUP_PRIVATE_KEY'
 BACKUP_PUBLIC_KEY='$BACKUP_PUBLIC_KEY'
 BACKUP_SHORT_ID='$BACKUP_SHORT_ID'
 WARP_UPSTREAM_ENABLED='$WITH_WARP_UPSTREAM'
-WARP_PROXY_PORT='$WARP_PROXY_PORT'
 EOF
   chmod 0600 "$STATE_FILE"
 }
@@ -1238,12 +1248,10 @@ verify_deployment() {
 health_check() {
   require_supported_host
   [[ -r $STATE_FILE ]] || die "No $APP_NAME deployment was found at $STATE_FILE."
-  # shellcheck disable=SC1090
-  source "$STATE_FILE"
-  DOMAIN="${DEPLOYED_DOMAIN:-}"
-  VPS_IP="${VPS_IP:-}"
-  HTTPUPGRADE_UUID="${HTTPUPGRADE_UUID:-}"
-  HTTPUPGRADE_PATH="${HTTPUPGRADE_PATH:-}"
+  DOMAIN="$(state_value DEPLOYED_DOMAIN)"
+  VPS_IP="$(state_value VPS_IP)"
+  HTTPUPGRADE_UUID="$(state_value HTTPUPGRADE_UUID)"
+  HTTPUPGRADE_PATH="$(state_value HTTPUPGRADE_PATH)"
   valid_domain "$DOMAIN" || die 'Saved deployment domain is invalid.'
   valid_ipv4 "$VPS_IP" || die 'Saved VPS IPv4 is invalid.'
   [[ -n $HTTPUPGRADE_UUID && -n $HTTPUPGRADE_PATH ]] || die 'Saved VLESS credentials are incomplete.'

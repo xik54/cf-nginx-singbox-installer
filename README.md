@@ -70,4 +70,4 @@ sudo bash install-cf-nginx-singbox.sh \
 - Cloudflare 主节点要求客户端支持 VLESS + TLS + HTTPUpgrade；备用二维码要求客户端支持 REALITY + Vision。
 - 二维码只包含节点参数；需要分流规则时导入对应的 sing-box JSON。
 - 后续检查：`sudo bash install-cf-nginx-singbox.sh --health-check`。
-
+- 每次安装成功后会在 SSH 终端直接渲染主/备节点二维码，并列出 JSON 下载目录与 `scp` 命令；后续可随时运行 `sudo bash install-cf-nginx-singbox.sh --show-client-artifacts` 重新显示，且不会修改服务或凭据。

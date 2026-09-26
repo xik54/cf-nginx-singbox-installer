@@ -455,6 +455,9 @@ main() {
   rm -rf "$release"
   install -d -m 0755 "$WEB_ROOT"
   mv "$staging" "$release"
+  # mktemp creates the staging directory as 0700. Once it becomes the public
+  # Nginx document-root target, the worker user must be able to traverse it.
+  chmod 0755 "$release"
   ln -sfn "$(basename "$release")" "$WEB_ROOT/.current-next"
   mv -Tf "$WEB_ROOT/.current-next" "$WEB_ROOT/current"
   nginx -t

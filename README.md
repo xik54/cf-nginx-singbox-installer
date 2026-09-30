@@ -16,7 +16,7 @@ GitHub 网站内容仓库 → 每 5 分钟同步 → 同一域名的网站
 
 ## 部署
 
-将你的网页提交到默认网站仓库 `https://github.com/xik54/nginx-site-content.git` 的 `site/` 或 `dist/` 目录。安装器会自动识别仓库的默认分支，因而不需要指定 `main` 或 `master`。
+将你的网页提交到默认网站仓库 `https://github.com/xik54/nginx-site-content` 的 `site/` 或 `dist/` 目录。安装器会自动识别仓库的默认分支，因而不需要指定 `main` 或 `master`。
 
 运行前：
 

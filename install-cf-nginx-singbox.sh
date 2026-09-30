@@ -36,7 +36,7 @@ readonly NGINX_ENABLED="/etc/nginx/sites-enabled/$NGINX_SITE_NAME.conf"
 readonly CF_ACCESS_CONF='/etc/nginx/conf.d/00-cf-nginx-singbox-origin-access.conf'
 readonly WEB_ROOT='/var/www/cf-nginx-singbox'
 readonly SITE_REPO_DIR='/opt/cf-nginx-singbox-site-content'
-readonly DEFAULT_SITE_REPOSITORY_URL='https://github.com/xik54/nginx-site-content.git'
+readonly DEFAULT_SITE_REPOSITORY_URL='https://github.com/xik54/nginx-site-content'
 readonly DEFAULT_BRANCH='main'
 readonly SINGBOX_APT_KEYRING='/etc/apt/keyrings/sagernet.asc'
 readonly SINGBOX_APT_REPOSITORY='/etc/apt/sources.list.d/sagernet.sources'
@@ -75,7 +75,7 @@ Required:
 
 Optional:
   --site-repository URL    Public Git repository containing site/ or dist/.
-                           Default: https://github.com/xik54/nginx-site-content.git
+                           Default: https://github.com/xik54/nginx-site-content
   --branch NAME            Website branch (default: repository default branch).
   --with-warp-upstream     Route proxy egress through official warp-cli SOCKS5.
   --without-warp-upstream  Keep proxy egress direct when updating an existing
@@ -125,7 +125,13 @@ while (($#)); do
 done
 
 valid_domain() {
-  [[ $1 =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] && [[ $1 != *..* ]] && [[ $1 == *.* ]]
+  local IFS='.' label
+  local -a labels
+  [[ ${#1} -le 253 && $1 == *.* && $1 != .* && $1 != *. && $1 != *..* ]] || return 1
+  read -r -a labels <<< "$1"
+  for label in "${labels[@]}"; do
+    [[ $label =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]] || return 1
+  done
 }
 
 valid_ipv4() {
@@ -270,11 +276,16 @@ listener_rows() {
   ss -H -ltnp "sport = :$port" 2>/dev/null || true
 }
 
+listener_rows_are_owned_by() {
+  local rows="$1" process="$2"
+  [[ -n $rows ]] && ! grep -Fvq "$process" <<< "$rows"
+}
+
 assert_listener_is_safe() {
   local port="$1" rows
   rows="$(listener_rows "$port")"
   [[ -z $rows ]] && return 0
-  if [[ $rows == *'nginx'* ]]; then
+  if listener_rows_are_owned_by "$rows" nginx; then
     return 0
   fi
   die "TCP $port is already owned by a non-Nginx process: $rows\nThe Cloudflare/Nginx design requires Nginx to own TCP 80 and 443. Existing services were left unchanged."
@@ -304,12 +315,12 @@ assert_existing_configuration_is_safe() {
   assert_listener_is_safe 80
   assert_listener_is_safe 443
   existing_loopback="$(listener_rows "$LOOPBACK_PORT")"
-  if [[ -n $existing_loopback && $existing_loopback != *'sing-box'* ]]; then
+  if [[ -n $existing_loopback ]] && ! listener_rows_are_owned_by "$existing_loopback" sing-box; then
     die "The loopback backend port $LOOPBACK_PORT is owned by another process: $existing_loopback"
   fi
   existing_backup="$(listener_rows "$BACKUP_PORT")"
   if [[ -n $existing_backup ]]; then
-    if [[ $existing_backup != *'sing-box'* ]]; then
+    if ! listener_rows_are_owned_by "$existing_backup" sing-box; then
       die "The direct fallback port $BACKUP_PORT is owned by another process: $existing_backup"
     fi
     [[ -e $CONFIG_FILE || -e $STATE_FILE ]] \
@@ -341,11 +352,11 @@ check_warp_reserved_ports() {
     || die "The WARP health port $WARP_HEALTH_PORT conflicts with a sing-box listener."
 
   listener="$(listener_rows "$WARP_PROXY_PORT")"
-  if [[ -n $listener && $listener != *'warp-svc'* ]]; then
+  if [[ -n $listener ]] && ! listener_rows_are_owned_by "$listener" warp-svc; then
     die "TCP $WARP_PROXY_PORT is already owned by a process other than warp-svc: $listener"
   fi
   listener="$(listener_rows "$WARP_HEALTH_PORT")"
-  if [[ -n $listener && $listener != *'sing-box'* ]]; then
+  if [[ -n $listener ]] && ! listener_rows_are_owned_by "$listener" sing-box; then
     die "TCP $WARP_HEALTH_PORT is already owned by another process: $listener"
   fi
 }
